@@ -19,6 +19,41 @@ static const int rowCount = sizeof(ledsPerRow)/sizeof(ledsPerRow[0]);
 
 long startTime;
 
+template<typename T>
+class LedDraw {
+public:
+	static void drawFrontPart(int startLed, int startX, int startY, bool mirror = false, int t = 0) {
+		int led = startLed;
+		int x, y;
+		x = startX;
+		y = startY;
+		int direction = 1;
+
+		if (mirror) {
+			direction = -1;
+			x += MAX_LEDS_PER_ROW - 1;
+		}
+
+		for (int row = 0; row < rowCount; row++) {
+			x += direction*skipPerRow[row];
+			for (int i = 0; i < ledsPerRow[row]; i++) {
+				leds[led] = T::pixel(x,y,t);
+				led++;
+				x += direction;
+			}
+			y++;
+			direction = -1 * direction;
+		}	
+	}
+
+	static void drawFront() {
+		long time = millis() - startTime;
+		drawFrontPart(0, 0, 0, false, time);
+		drawFrontPart(100, 8, 0, true, time);
+	}
+};
+
+
 void calculateVestPath(int startLed, int startX, int startY, bool mirror = false) {
 	int led = startLed;
 	int x, y;
@@ -88,7 +123,6 @@ CRGB plasma(int x, int y, int t) {
 	byte g = sin8(sin8(x*11)+sin8(y*3) + t/13);
 	byte b = sin8(sin8(x*13)+sin8(y*7) + t/23);
 	return CRGB(r,g,b);
-
 }
 
 void plasma2d() {
@@ -98,6 +132,24 @@ void plasma2d() {
 	}
 }
 
+class Plasma {
+public:
+	static CRGB pixel(int x, int y, int t) {
+		return plasma(x,y,t);
+	}
+};
+
+class Diamond {
+public:
+	CRGB pixel(int x, int y, int t) {
+		
+
+	}
+
+	int x;
+	int y;
+	int spawnTime;
+};
 
 void loop() { 
 	static uint8_t hue = 0;
@@ -111,7 +163,10 @@ void loop() {
 	}
 	//ledsOutline[5] = 0;*/
 	//outlineWave();
-	plasma2d();
+	// OLD version
+	//plasma2d();
+	// NEW version
+	LedDraw<Plasma>::drawFront();
 	/*
 	// if we're in an even minute, cylon man, otherwise, breathe
 	if ((millis() / 60000) % 4 == 0) {
