@@ -22,7 +22,7 @@ long startTime;
 template<typename T>
 class LedDraw {
 public:
-	static void drawFrontPart(int startLed, int startX, int startY, bool mirror = false, int t = 0) {
+	static void drawFrontPart(T& instance, int startLed, int startX, int startY, bool mirror = false, int t = 0) {
 		int led = startLed;
 		int x, y;
 		x = startX;
@@ -37,7 +37,7 @@ public:
 		for (int row = 0; row < rowCount; row++) {
 			x += direction*skipPerRow[row];
 			for (int i = 0; i < ledsPerRow[row]; i++) {
-				leds[led] = T::pixel(x,y,t);
+				leds[led] = instance.pixel(x,y,t);
 				led++;
 				x += direction;
 			}
@@ -46,10 +46,10 @@ public:
 		}	
 	}
 
-	static void drawFront() {
+	static void drawFront(T& instance) {
 		long time = millis() - startTime;
-		drawFrontPart(0, 0, 0, false, time);
-		drawFrontPart(100, 8, 0, true, time);
+		drawFrontPart(instance, 0, 0, 0, false, time);
+		drawFrontPart(instance, 100, 8, 0, true, time);
 	}
 };
 
@@ -125,6 +125,7 @@ CRGB plasma(int x, int y, int t) {
 	return CRGB(r,g,b);
 }
 
+
 void plasma2d() {
 	// TODO: create and initialize ledX, ledY
 	for(int i = 0; i < 2 * LEDS_PER_STRIP; i++) {
@@ -134,16 +135,72 @@ void plasma2d() {
 
 class Plasma {
 public:
-	static CRGB pixel(int x, int y, int t) {
+	CRGB pixel(int x, int y, int t) {
 		return plasma(x,y,t);
 	}
+};
+
+class PalettedPlasma {
+private:
+	CRGBPalette16 current;
+	CRGBPalette16 target;
+	CRGBPalette16 last;
+	long startTime;
+	long lastTime;
+public:
+	CRGB pixel(int x, int y, int t) {
+		byte index = sin8(sin8(x*7)+sin8(y*5) + t/11);
+		byte brightness = sin8(sin8(x*11)+sin8(y*3) + t/13);
+		return ColorFromPalette(current, index, qsub8(brightness, 30));
+	}
+
+	PalettedPlasma() {
+		lastTime = startTime = millis();
+		last = RainbowColors_p;
+		target = PartyColors_p;
+	}
+
+
+
+	void update() {
+		int seconds = (millis() - lastTime);
+
+		if (seconds > 5000) {
+			last = target;
+			lastTime = millis();
+			switch(random8() % 4) {
+			case 0:
+				target = RainbowColors_p;
+				break;
+			case 1:
+				target = PartyColors_p;
+				break;
+			case 2:
+				target = LavaColors_p;
+				break;
+			case 3:
+				target = ForestColors_p;
+				break;
+			}
+			//current = target;
+		} else {
+			blend(last.entries, target.entries, current.entries, 16, seconds*255/5000);
+		}
+
+
+	}
+
+	void draw() {
+		LedDraw<PalettedPlasma>::drawFront(*this);
+	}
+
 };
 
 class Diamond {
 public:
 	CRGB pixel(int x, int y, int t) {
 		
-
+		return 0;
 	}
 
 	int x;
@@ -151,11 +208,89 @@ public:
 	int spawnTime;
 };
 
+
+class Animation {
+public:
+	virtual void update() = 0;
+	virtual void draw() = 0;
+};
+
+DEFINE_GRADIENT_PALETTE(firePalette) {
+	0, 0,0,0,
+	32, 255,0,0,
+	96, 255,128,0,
+	128, 255,128,96,
+	255, 255,128,96
+};
+
+
+class Fire : Animation {
+private:
+	int width;
+	int height;
+
+	uint8_t *buffer1;
+	uint8_t *buffer2;
+
+	uint8_t *src;
+	uint8_t *dst;
+
+	CRGBPalette256 palette;
+public:
+	CRGB pixel(int x, int y, int t) {
+		return ColorFromPalette(palette, src[x + 1 + (y + 2)*width], 255, LINEARBLEND);
+		//return ColorFromPalette(LavaColors_p, src[x + (y + 2)*width], 255, LINEARBLEND);
+		
+	}
+
+	Fire(int width, int height) {
+		palette = firePalette;
+		this->width = width;
+		this->height = height + 2;
+		buffer1 = new uint8_t[width * height];
+		buffer2 = new uint8_t[width * height];
+		src = buffer1;
+		dst = buffer2;
+		memset(buffer1, 0, width*height*sizeof(buffer1[0]));
+		memset(buffer2, 0, width*height*sizeof(buffer2[0]));
+	}
+
+	void update() {
+		for(int x = 1; x < width - 1; x++) {
+			for(int y = 0; y < 2; y++) {
+				src[x + y*width] = (random8() + 128) / 2;// > 128 ? 255 : 0;
+			}
+		}
+		for(int x = 1; x < width - 1; x++) {
+			for(int y = 2; y < height; y++) {
+				dst[x + y*width] = qsub8((src[x + (y-1)*width] + src[x + 1 + (y-1)*width] \
+									+ src[x - 1 + (y-1	)*width] + src[x + (y-2)*width]) / 4, 10);
+			}
+		}
+		uint8_t* tmp = src;
+		src = dst;
+		dst = tmp;
+		delay(25);
+	}	
+
+	void draw() {
+		LedDraw<Fire>::drawFront(*this);
+	}
+};
+static Fire fire(18,18);
+static Plasma plasmaState;
+static PalettedPlasma palPlasma;
+
 void loop() { 
 	static uint8_t hue = 0;
 	Serial.print("x");
 	long time = millis() - startTime;
-	LEDS.setBrightness(time < 30000 ? time / 1000.f : 30);
+	LEDS.setBrightness(time < 15000 ? time / 500.f : 60);
+	//fire.update();
+	//fire.draw();
+	palPlasma.update();
+	palPlasma.draw();
+	//LedDraw<Plasma>::drawFront(plasmaState);
 /*
 	for(int i = 0; i < OUTLINE_NUM_LEDS; i++) {
 		// Set the i'th led to red 
@@ -166,7 +301,7 @@ void loop() {
 	// OLD version
 	//plasma2d();
 	// NEW version
-	LedDraw<Plasma>::drawFront();
+	//LedDraw<Plasma>::drawFront();
 	/*
 	// if we're in an even minute, cylon man, otherwise, breathe
 	if ((millis() / 60000) % 4 == 0) {
