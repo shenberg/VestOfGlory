@@ -4,18 +4,28 @@
 #define LEDS_PER_STRIP 100
 #define LEFT_FRONT_PIN 13
 #define RIGHT_FRONT_PIN 14
-#define LEFT_REAR_PIN 12
-#define RIGHT_REAR_PIN 11
+#define LEFT_REAR_PIN 11
+#define RIGHT_REAR_PIN 12
 
 // Define the array of leds
 CRGB leds[LEDS_PER_STRIP * 4];
 int ledX[LEDS_PER_STRIP * 4];
 int ledY[LEDS_PER_STRIP * 4];
 
-static const int MAX_LEDS_PER_ROW = 7;
+static const int MAX_LEDS_PER_ROW_FRONT = 7;
 static const int ledsPerRow[] = {3, 7, 7, 7, 7, 7, 7, 7, 7, 6, 5, 5, 4, 4, 5, 4, 4, 4};
 static const int skipPerRow[] = {4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, -1, 1, 0, 1};
-static const int rowCount = sizeof(ledsPerRow)/sizeof(ledsPerRow[0]);
+static const int MAX_LEDS_PER_ROW_BACK = 6;
+static const int ledsPerRowBackLeft[] = {4, 4, 4, 4, 4, 5, 5, 5, 6, 6, 5, 5, 5, 5, 5, 6, 6}; // total 84 LEDs
+static const int skipPerRowBackLeft[] = {0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0};
+static const int ledsPerRowBackRight[] = {4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6};
+static const int skipPerRowBackRight[] = {0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0};
+
+static const int rowCountFront = sizeof(ledsPerRow)/sizeof(ledsPerRow[0]);
+static const int rowCountBack = sizeof(ledsPerRowBackLeft)/sizeof(ledsPerRowBackLeft[0]);
+
+static const int LEDS_BACK_LEFT = 84;
+static const int LEDS_BACK_RIGHT = 81;
 
 long startTime;
 
@@ -31,10 +41,10 @@ public:
 
 		if (mirror) {
 			direction = -1;
-			x += MAX_LEDS_PER_ROW - 1;
+			x += MAX_LEDS_PER_ROW_FRONT - 1;
 		}
 
-		for (int row = 0; row < rowCount; row++) {
+		for (int row = 0; row < rowCountFront; row++) {
 			x += direction*skipPerRow[row];
 			for (int i = 0; i < ledsPerRow[row]; i++) {
 				leds[led] = instance.pixel(x,y,t);
@@ -46,10 +56,45 @@ public:
 		}	
 	}
 
+	static void drawBackPart(T& instance, const int *ledCounts, const int *skipCounts, int startLed, int startX, int startY, bool mirror = false, int t = 0) {
+		int led = startLed;
+		int x, y;
+		x = startX;
+		y = startY;
+		int direction = 1;
+
+		if (mirror) {
+			direction = -1;
+			x += MAX_LEDS_PER_ROW_BACK - 1;
+		}
+
+		for (int row = 0; row < rowCountBack; row++) {
+			x += direction*skipCounts[row];
+			for (int i = 0; i < ledCounts[row]; i++) {
+				leds[led] = instance.pixel(x,y,t);
+				led++;
+				x += direction;
+			}
+			y++;
+			direction = -1 * direction;
+		}	
+	}
+
+
+
 	static void drawFront(T& instance) {
-		long time = millis() - startTime;
+		long time = (millis() - startTime);
 		drawFrontPart(instance, 0, 0, 0, false, time);
-		drawFrontPart(instance, 100, 8, 0, true, time);
+		drawFrontPart(instance, LEDS_PER_STRIP, MAX_LEDS_PER_ROW_FRONT+1, 0, true, time);
+	}
+	static void drawBack(T& instance) {
+		long time = (millis() - startTime);
+		drawBackPart(instance, ledsPerRowBackLeft, skipPerRowBackLeft, LEDS_PER_STRIP*2, 0, 0, true, time);
+		drawBackPart(instance, ledsPerRowBackRight, skipPerRowBackRight, LEDS_PER_STRIP*2 + LEDS_BACK_LEFT, MAX_LEDS_PER_ROW_BACK, 0, false, time);
+	}
+	static void draw(T& instance) {
+		drawFront(instance);
+		drawBack(instance);
 	}
 };
 
@@ -63,10 +108,10 @@ void calculateVestPath(int startLed, int startX, int startY, bool mirror = false
 
 	if (mirror) {
 		direction = -1;
-		x += MAX_LEDS_PER_ROW - 1;
+		x += MAX_LEDS_PER_ROW_FRONT - 1;
 	}
 
-	for (int row = 0; row < rowCount; row++) {
+	for (int row = 0; row < rowCountFront; row++) {
 		x += direction*skipPerRow[row];
 		for (int i = 0; i < ledsPerRow[row]; i++) {
 			ledX[led] = x;
@@ -85,6 +130,8 @@ void setup() {
 	Serial.println("resetting");
 	LEDS.addLeds<NEOPIXEL,LEFT_FRONT_PIN>(leds, LEDS_PER_STRIP);
 	LEDS.addLeds<NEOPIXEL,RIGHT_FRONT_PIN>(&leds[LEDS_PER_STRIP], LEDS_PER_STRIP);
+	LEDS.addLeds<NEOPIXEL, LEFT_REAR_PIN>(&leds[LEDS_PER_STRIP*2], LEDS_BACK_LEFT);
+	LEDS.addLeds<NEOPIXEL, RIGHT_REAR_PIN>(&leds[LEDS_PER_STRIP*2 + LEDS_BACK_LEFT], LEDS_BACK_RIGHT);
 	LEDS.setBrightness(0);
 
 	calculateVestPath(0, 0, 0, false);
@@ -149,8 +196,8 @@ private:
 	long lastTime;
 public:
 	CRGB pixel(int x, int y, int t) {
-		byte index = sin8(sin8(x*7)+sin8(y*5) + t/11);
-		byte brightness = sin8(sin8(x*11)+sin8(y*3) + t/13);
+		byte index = sin8(sin8(x*7/3)+sin8(y*5/3) + t/17);
+		byte brightness = sin8(sin8(x*11/3)+sin8(y*3/3) + t/19);
 		return ColorFromPalette(current, index, qsub8(brightness, 30));
 	}
 
@@ -191,7 +238,7 @@ public:
 	}
 
 	void draw() {
-		LedDraw<PalettedPlasma>::drawFront(*this);
+		LedDraw<PalettedPlasma>::draw(*this);
 	}
 
 };
