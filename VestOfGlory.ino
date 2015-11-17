@@ -196,9 +196,9 @@ private:
 	long lastTime;
 public:
 	CRGB pixel(int x, int y, int t) {
-		byte index = sin8(sin8(x*7/3)+sin8(y*5/3) + t/17);
-		byte brightness = sin8(sin8(x*11/3)+sin8(y*3/3) + t/19);
-		return ColorFromPalette(current, index, qsub8(brightness, 30));
+		byte index = (sin16(sin16(x*371)+sin16(y*139) +32767*2 + t*7) + 32767) >> 8 ;
+		byte brightness = (sin16(sin16(x*197)+sin16(y*191) +32767*2 + t*5) + 32767) >> 8;
+		return ColorFromPalette(current, index, qsub8(brightness, 40));
 	}
 
 	PalettedPlasma() {
@@ -243,8 +243,29 @@ public:
 
 };
 
-class Diamond {
+
+enum ShapeType { 
+	DIAMOND,
+	CIRCLE,
+	SQUARE
+};
+
+class Shape {
 public:
+	Shape() : alive(false) {}
+
+	CRGB pixel(int x, int y, int t) {
+
+	}
+
+	bool alive;	
+};
+
+class Diamond : public Shape {
+public:
+	Diamond(int lifetime, int spawnTime, int blah) {
+
+	}
 	CRGB pixel(int x, int y, int t) {
 		
 		return 0;
@@ -256,11 +277,39 @@ public:
 };
 
 
+
 class Animation {
 public:
 	virtual void update() = 0;
 	virtual void draw() = 0;
 };
+
+
+class Shapes : public Animation {
+	static const int SHAPE_COUNT = 10;
+	Shape shapes[SHAPE_COUNT];
+public:
+
+	void update() {
+
+	}
+	void draw() {
+		// draw updates too here :(
+		//killAndSpawn();
+		//LedDraw<Diamond>::draw(*this);
+	}
+
+	CRGB pixel(int x, int y, int t) {
+		int r,g,b;
+		for(int i = 0; i < SHAPE_COUNT; i++) {
+			Shape& shape = shapes[i];
+			if (!shape.alive) continue;
+			CRGB color = shape.pixel(x,y,t);
+
+		}
+	}
+};
+
 
 DEFINE_GRADIENT_PALETTE(firePalette) {
 	0, 0,0,0,
